@@ -1,0 +1,190 @@
+# ==============================================================================
+# DOCKER COMPOSE CONFIGURATION
+# ==============================================================================
+# Docker Compose allows you to define and run multi-container applications
+# Instead of running docker build and docker run for each service separately,
+# you can use a single docker-compose.yml file to manage everything
+#
+# Benefits:
+#   - Start all services with one command: docker-compose up
+#   - Services can communicate using service names (backend, frontend)
+#   - Automatic network creation and configuration
+#   - Easy to scale and manage multiple containers
+
+# Specify the Docker Compose file format version
+# Version 3.8 is stable and widely supported
+version: '3.8'
+
+# ==============================================================================
+# SERVICES
+# ==============================================================================
+# Services are the containers that make up your application
+# Each service runs in its own isolated container
+services:
+
+  # ============================================================================
+  # BACKEND SERVICE (Express.js API)
+  # ============================================================================
+  backend:
+    # Service name: 'backend'
+    # Other services can reach this using http://backend:5000
+    # Docker Compose creates a DNS entry for this service name
+
+    # BUILD CONFIGURATION
+    # Tell Docker to build an image from the Dockerfile in ./backend folder
+    build:
+      context: ./backend        # Path to the directory containing Dockerfile
+      dockerfile: Dockerfile    # Name of the Dockerfile (can be omitted if default)
+
+    # CONTAINER NAME
+    # Give the container a custom name (optional but helpful for identification)
+    container_name: my-backend-container
+
+    # PORT MAPPING
+    # Map host port 5000 to container port 5000
+    # Format: "HOST_PORT:CONTAINER_PORT"
+    # Access the backend at http://localhost:5000 from your computer
+    ports:
+      - "5000:5000"
+
+    # ENVIRONMENT VARIABLES
+    # Pass environment variables to the container at runtime
+    # These override any ENV settings in the Dockerfile
+    environment:
+      - NODE_ENV=production     # Tell Node.js to run in production mode
+      - PORT=5000               # Port for Express server to listen on
+
+    # NETWORK
+    # Connect this service to the custom network (defined below)
+    # This allows backend and frontend to communicate
+    networks:
+      - app-network
+
+    # RESTART POLICY
+    # Automatically restart the container if it crashes
+    # Options: no, always, on-failure, unless-stopped
+    restart: unless-stopped
+
+  # ============================================================================
+  # FRONTEND SERVICE (React + nginx)
+  # ============================================================================
+  frontend:
+    # Service name: 'frontend'
+    # This service serves the React application using nginx
+
+    # BUILD CONFIGURATION
+    # Build the image from the Dockerfile in ./frontend folder
+    build:
+      context: ./frontend       # Path to the directory containing Dockerfile
+      dockerfile: Dockerfile    # Name of the Dockerfile
+      # Build arguments (optional) - passed during build time
+      # args:
+      #   - VITE_API_URL=http://backend:5000
+
+    # CONTAINER NAME
+    container_name: my-frontend-container
+
+    # PORT MAPPING
+    # Map host port 3000 to container port 80 (nginx default)
+    # Format: "HOST_PORT:CONTAINER_PORT"
+    # Access the frontend at http://localhost:3000 from your browser
+    ports:
+      - "3000:80"
+
+    # ENVIRONMENT VARIABLES
+    # NOTE: For Vite, environment variables are used at BUILD time, not runtime
+    # Since we're serving static files with nginx, runtime env vars don't work
+    # To use this env var, you need to modify the Dockerfile to use build args
+    # For now, the frontend uses the default http://localhost:5000 from code
+    environment:
+      - VITE_API_URL=http://backend:5000
+
+    # DEPENDS ON
+    # This ensures the backend service starts BEFORE the frontend
+    # Docker Compose starts services in dependency order
+    # Frontend depends on backend because it makes API calls to it
+    depends_on:
+      - backend
+
+    # NETWORK
+    # Connect this service to the same network as backend
+    # This allows frontend container to reach backend using http://backend:5000
+    networks:
+      - app-network
+
+    # RESTART POLICY
+    restart: unless-stopped
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+# Define custom networks for service communication
+# All services on the same network can communicate using service names
+networks:
+  app-network:
+    # Network driver type
+    # 'bridge' is the default for single-host networking
+    # Services can reach each other using service names (backend, frontend)
+    driver: bridge
+
+# How networking works:
+# 1. Docker Compose creates a network called 'app-network'
+# 2. Both backend and frontend containers join this network
+# 3. Docker's internal DNS resolves service names:
+#    - 'backend' resolves to the backend container's IP
+#    - 'frontend' resolves to the frontend container's IP
+# 4. Frontend can call http://backend:5000/api/health
+#    (uses service name instead of localhost or IP)
+# 5. From your host machine:
+#    - Access backend: http://localhost:5000
+#    - Access frontend: http://localhost:3000
+
+# ==============================================================================
+# IMPORTANT NOTES
+# ==============================================================================
+# 1. SERVICE COMMUNICATION:
+#    - Inside containers: Use service names (http://backend:5000)
+#    - From host machine: Use localhost (http://localhost:5000)
+#
+# 2. BUILD VS RUNTIME ENVIRONMENT VARIABLES:
+#    - Backend: Environment variables work at runtime ✅
+#    - Frontend (React/Vite): Need to be set at BUILD time
+#      To fix: Update frontend Dockerfile to use build args
+#
+# 3. DEPENDS_ON:
+#    - Only waits for container to start, not for app to be ready
+#    - Backend container starts before frontend, but Express might still be initializing
+#    - For production, consider using health checks (not included in this simple setup)
+#
+# 4. DATA PERSISTENCE:
+#    - No volumes configured (as requested)
+#    - Data is lost when containers are removed
+#    - For databases, you'd add volumes to persist data
+#
+# 5. NETWORKING:
+#    - Containers can talk to each other using service names
+#    - Ports are still mapped to host for external access
+#    - You can add more services easily (e.g., database, redis)
+
+# ==============================================================================
+# EXAMPLE: Adding a Database (optional)
+# ==============================================================================
+# If you want to add a database later, you could add:
+#
+# services:
+#   database:
+#     image: postgres:15-alpine
+#     container_name: my-database-container
+#     environment:
+#       - POSTGRES_USER=myuser
+#       - POSTGRES_PASSWORD=mypassword
+#       - POSTGRES_DB=mydb
+#     ports:
+#       - "5432:5432"
+#     networks:
+#       - app-network
+#     volumes:
+#       - db-data:/var/lib/postgresql/data
+#
+# volumes:
+#   db-data:

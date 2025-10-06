@@ -1,0 +1,319 @@
+# ==============================================================================
+# GitHub Actions CI/CD Workflow
+# ==============================================================================
+# This workflow automates testing, building, and deploying your application
+# It runs automatically when you push code or create pull requests
+#
+# Workflow flow:
+#   1. Test backend (run Jest tests)
+#   2. Test frontend (ensure build succeeds)
+#   3. Build Docker images and push to Docker Hub (only if tests pass)
+
+# ==============================================================================
+# WORKFLOW NAME
+# ==============================================================================
+# This name appears in the GitHub Actions tab
+name: CI/CD Pipeline
+
+# ==============================================================================
+# TRIGGERS (WHEN TO RUN THIS WORKFLOW)
+# ==============================================================================
+# Define when this workflow should run
+on:
+  # Trigger on push to main branch
+  # Example: When you merge a pull request or push directly to main
+  push:
+    branches:
+      - main
+
+  # Trigger on pull requests targeting main branch
+  # Example: When someone creates a PR to merge into main
+  # This runs tests before allowing merge
+  pull_request:
+    branches:
+      - main
+
+# ==============================================================================
+# JOBS
+# ==============================================================================
+# Jobs are independent tasks that can run in parallel or sequentially
+# Each job runs on a fresh virtual machine (runner)
+jobs:
+
+  # ============================================================================
+  # JOB 1: TEST BACKEND
+  # ============================================================================
+  # This job tests the Express.js backend
+  test-backend:
+    # Job name displayed in GitHub Actions UI
+    name: Test Backend
+
+    # Runner environment: Ubuntu Linux (latest version)
+    # GitHub provides free runners with common OS options
+    # Other options: windows-latest, macos-latest
+    runs-on: ubuntu-latest
+
+    # Steps are executed sequentially within this job
+    steps:
+      # ------------------------------------------------------------------------
+      # STEP 1: Checkout code from repository
+      # ------------------------------------------------------------------------
+      # This action checks out your repository code
+      # Without this, the runner would have an empty filesystem
+      # actions/checkout@v4 is maintained by GitHub
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------------
+      # STEP 2: Setup Node.js environment
+      # ------------------------------------------------------------------------
+      # Install Node.js version 18 on the runner
+      # This is required to run npm commands
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          # Cache npm dependencies for faster subsequent runs
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      # ------------------------------------------------------------------------
+      # STEP 3: Install backend dependencies
+      # ------------------------------------------------------------------------
+      # Navigate to backend folder and install npm packages
+      # This installs everything in package.json (including devDependencies like Jest)
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+        # npm ci (clean install) is preferred over npm install in CI/CD because:
+        #   - Faster (uses package-lock.json exactly)
+        #   - More reliable (deletes node_modules first)
+        #   - Fails if package.json and package-lock.json are out of sync
+
+      # ------------------------------------------------------------------------
+      # STEP 4: Run backend tests
+      # ------------------------------------------------------------------------
+      # Execute Jest tests for the backend
+      # If any test fails, the workflow stops and marks this job as failed
+      - name: Run backend tests
+        working-directory: ./backend
+        run: npm test
+        # This runs "jest" from package.json scripts
+        # If tests fail, the exit code is non-zero → workflow fails → no deployment
+
+  # ============================================================================
+  # JOB 2: TEST FRONTEND
+  # ============================================================================
+  # This job tests the React frontend
+  test-frontend:
+    # Job name displayed in GitHub Actions UI
+    name: Test Frontend
+
+    # Runner environment
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------------
+      # STEP 1: Checkout code
+      # ------------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------------
+      # STEP 2: Setup Node.js
+      # ------------------------------------------------------------------------
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # ------------------------------------------------------------------------
+      # STEP 3: Install frontend dependencies
+      # ------------------------------------------------------------------------
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      # ------------------------------------------------------------------------
+      # STEP 4: Build frontend
+      # ------------------------------------------------------------------------
+      # Run Vite build to ensure the app compiles without errors
+      # This doesn't run tests (no Jest setup in frontend)
+      # But it verifies TypeScript types, imports, and bundling work correctly
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+        # If build fails (syntax errors, type errors, etc.), workflow fails
+        # The dist folder is created but discarded (not needed for testing)
+
+  # ============================================================================
+  # JOB 3: BUILD AND PUSH DOCKER IMAGES
+  # ============================================================================
+  # This job builds Docker images and pushes them to Docker Hub
+  build-and-push:
+    # Job name displayed in GitHub Actions UI
+    name: Build and Push Docker Images
+
+    # Runner environment
+    runs-on: ubuntu-latest
+
+    # DEPENDENCIES: Only run this job if both test jobs succeed
+    # If either test-backend or test-frontend fails, this job is skipped
+    # This prevents deploying broken code
+    needs:
+      - test-backend
+      - test-frontend
+
+    # CONDITIONAL EXECUTION: Only run on pushes to main (not on pull requests)
+    # Pull requests should only run tests, not deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      # ------------------------------------------------------------------------
+      # STEP 1: Checkout code
+      # ------------------------------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------------
+      # STEP 2: Setup Docker Buildx
+      # ------------------------------------------------------------------------
+      # Docker Buildx is an extended build tool with advanced features
+      # Enables multi-platform builds, caching, and more
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        # This is optional but recommended for better build performance
+
+      # ------------------------------------------------------------------------
+      # STEP 3: Login to Docker Hub
+      # ------------------------------------------------------------------------
+      # Authenticate with Docker Hub to allow pushing images
+      # Credentials are stored securely in GitHub Secrets
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          # Docker Hub username from GitHub Secrets
+          # To set: GitHub repo → Settings → Secrets and variables → Actions → New secret
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Docker Hub access token (not password!) from GitHub Secrets
+          # To create token: Docker Hub → Account Settings → Security → New Access Token
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # HOW TO SET UP SECRETS:
+      # 1. Go to your GitHub repository
+      # 2. Click Settings → Secrets and variables → Actions
+      # 3. Click "New repository secret"
+      # 4. Add DOCKERHUB_USERNAME with your Docker Hub username
+      # 5. Add DOCKERHUB_TOKEN with your Docker Hub access token
+      #    (Create token at https://hub.docker.com/settings/security)
+
+      # ------------------------------------------------------------------------
+      # STEP 4: Build and push backend Docker image
+      # ------------------------------------------------------------------------
+      # Build the backend Docker image and push to Docker Hub
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          # Context: Directory containing the Dockerfile
+          context: ./backend
+          # Dockerfile location (relative to context)
+          file: ./backend/Dockerfile
+          # Push to Docker Hub (true = push, false = build only)
+          push: true
+          # Tags for the image
+          # Format: DOCKERHUB_USERNAME/IMAGE_NAME:TAG
+          # Example: johndoe/my-backend:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/my-backend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/my-backend:${{ github.sha }}
+          # GitHub SHA = commit hash (unique identifier for this build)
+          # This allows you to deploy specific versions later
+
+          # Cache Docker layers for faster subsequent builds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ------------------------------------------------------------------------
+      # STEP 5: Build and push frontend Docker image
+      # ------------------------------------------------------------------------
+      # Build the frontend Docker image and push to Docker Hub
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          # Tags: latest (for production) + commit SHA (for version tracking)
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/my-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/my-frontend:${{ github.sha }}
+
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ==============================================================================
+# WORKFLOW SUMMARY
+# ==============================================================================
+# When you push to main:
+#   1. ✅ test-backend runs (Jest tests)
+#   2. ✅ test-frontend runs (Vite build)
+#   3. ✅ build-and-push runs (only if tests pass)
+#      - Builds backend Docker image
+#      - Pushes to Docker Hub as: username/my-backend:latest
+#      - Builds frontend Docker image
+#      - Pushes to Docker Hub as: username/my-frontend:latest
+#
+# When you create a pull request:
+#   1. ✅ test-backend runs
+#   2. ✅ test-frontend runs
+#   3. ❌ build-and-push SKIPS (only runs on push to main)
+#
+# If any test fails:
+#   - Workflow stops immediately
+#   - No Docker images are built or pushed
+#   - You're notified via GitHub (red X on commit/PR)
+
+# ==============================================================================
+# NEXT STEPS (OPTIONAL ENHANCEMENTS)
+# ==============================================================================
+# You could extend this workflow with:
+#
+# 1. Deploy to production server (AWS, Azure, DigitalOcean, etc.)
+# 2. Run security scans (Snyk, Trivy)
+# 3. Notify team on Slack/Discord when deployment completes
+# 4. Create GitHub releases with changelogs
+# 5. Run integration tests after deployment
+# 6. Deploy to staging environment first (separate workflow)
+# 7. Add manual approval step before production deployment
+
+# ==============================================================================
+# ENVIRONMENT VARIABLES AND SECRETS
+# ==============================================================================
+# Secrets (sensitive data - stored encrypted):
+#   - DOCKERHUB_USERNAME: Your Docker Hub username
+#   - DOCKERHUB_TOKEN: Your Docker Hub access token (not password)
+#
+# Built-in GitHub variables (automatically available):
+#   - github.sha: Git commit hash
+#   - github.ref: Git reference (e.g., refs/heads/main)
+#   - github.event_name: Event that triggered workflow (push, pull_request)
+#   - github.actor: Username who triggered the workflow
+#   - github.repository: Repository name (owner/repo)
+
+# ==============================================================================
+# DOCKER IMAGES PRODUCED
+# ==============================================================================
+# After successful workflow:
+#   - Docker Hub: username/my-backend:latest
+#   - Docker Hub: username/my-backend:COMMIT_SHA
+#   - Docker Hub: username/my-frontend:latest
+#   - Docker Hub: username/my-frontend:COMMIT_SHA
+#
+# You can pull and run these images:
+#   docker pull username/my-backend:latest
+#   docker run -p 5000:5000 username/my-backend:latest
+#
+#   docker pull username/my-frontend:latest
+#   docker run -p 3000:80 username/my-frontend:latest

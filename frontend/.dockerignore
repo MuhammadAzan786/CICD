@@ -1,0 +1,109 @@
+# ==============================================================================
+# .dockerignore - Files and folders to exclude from Docker build context
+# ==============================================================================
+# This file prevents unnecessary files from being sent to Docker daemon
+# Benefits:
+#   1. Faster builds (less data to transfer)
+#   2. Smaller build context
+#   3. Avoid copying sensitive data
+#   4. Prevent conflicts between host and container environments
+
+# ==============================================================================
+# NODE MODULES
+# ==============================================================================
+# Exclude node_modules from the host machine
+# Why? The Dockerfile runs "npm install" during the build stage
+# Host node_modules might be for a different OS (Windows vs Linux)
+# Let Docker install fresh dependencies inside the container
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# ==============================================================================
+# BUILD OUTPUT
+# ==============================================================================
+# Exclude the dist folder (build output)
+# Why? The Dockerfile runs "npm run build" to create a fresh dist
+# We don't want to copy an old/stale build from the host
+dist
+dist-ssr
+build
+
+# ==============================================================================
+# ENVIRONMENT FILES
+# ==============================================================================
+# Exclude environment files containing sensitive data
+# Why? .env files may contain API keys or secrets
+# For React: Build-time env variables should be passed using:
+#   docker build --build-arg VITE_API_URL=http://api.example.com
+# At runtime, nginx doesn't need .env (frontend is static files)
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+
+# ==============================================================================
+# GIT FILES
+# ==============================================================================
+# Exclude Git repository files
+# Why? .git folder is large and not needed for building/running the app
+.git
+.gitignore
+
+# ==============================================================================
+# DOCKER FILES
+# ==============================================================================
+# Exclude Docker-related files (not needed inside the container)
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# ==============================================================================
+# TEST AND COVERAGE
+# ==============================================================================
+# Exclude test files and coverage reports (not needed in production)
+coverage
+.nyc_output
+
+# ==============================================================================
+# DOCUMENTATION
+# ==============================================================================
+# Exclude documentation files (reduces build context size)
+README.md
+*.md
+
+# ==============================================================================
+# IDE AND OS FILES
+# ==============================================================================
+# Exclude editor and operating system files
+# These are personal preferences and not needed in the container
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ==============================================================================
+# LOGS
+# ==============================================================================
+# Exclude log files (not needed for building)
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==============================================================================
+# CACHE FILES
+# ==============================================================================
+# Exclude various cache directories
+.eslintcache
+.cache
+.parcel-cache
+.vite

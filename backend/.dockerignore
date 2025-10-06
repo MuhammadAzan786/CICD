@@ -1,0 +1,72 @@
+# ==============================================================================
+# .dockerignore - Files and folders to exclude from Docker build context
+# ==============================================================================
+# This file works like .gitignore but for Docker
+# Files listed here won't be copied into the Docker image
+# Benefits:
+#   1. Smaller image size
+#   2. Faster build times (less data to transfer)
+#   3. Avoid copying sensitive files
+#   4. Prevent conflicts (e.g., host node_modules vs container node_modules)
+
+# ==============================================================================
+# NODE MODULES
+# ==============================================================================
+# Exclude node_modules from the host machine
+# Why? The Dockerfile runs "npm install" inside the container
+# Using host node_modules can cause platform compatibility issues
+# (e.g., native bindings compiled for Windows won't work in Linux container)
+node_modules
+npm-debug.log
+
+# ==============================================================================
+# ENVIRONMENT FILES
+# ==============================================================================
+# Exclude .env files containing sensitive data (API keys, passwords, etc.)
+# Why? Environment variables should be passed at runtime using:
+#   docker run -e VAR_NAME=value
+#   or docker run --env-file .env
+# Never hardcode secrets in Docker images!
+.env
+.env.local
+.env.*.local
+
+# ==============================================================================
+# GIT FILES
+# ==============================================================================
+# Exclude Git repository files
+# Why? The .git folder is large and not needed in production
+# It contains full project history which increases image size
+.git
+.gitignore
+
+# ==============================================================================
+# DOCKER FILES
+# ==============================================================================
+# Exclude Docker-related files (not needed inside the container)
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# ==============================================================================
+# TEST FILES
+# ==============================================================================
+# Exclude test files and coverage reports (not needed in production)
+*.test.js
+coverage
+
+# ==============================================================================
+# DOCUMENTATION
+# ==============================================================================
+# Exclude documentation files (reduces image size)
+README.md
+*.md
+
+# ==============================================================================
+# IDE AND OS FILES
+# ==============================================================================
+# Exclude editor and operating system files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
