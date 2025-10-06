@@ -43,8 +43,8 @@ function App() {
 
   return (
     <div className="app">
-      <h1>Frontend Connected!</h1>
-
+      <h1>Frontend Connected! </h1>
+      <h2>Testing the pipeline !!!</h2>
       <div className="button-container">
         <button onClick={checkHealth} disabled={loading}>
           Check Backend Health
