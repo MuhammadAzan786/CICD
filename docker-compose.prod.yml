@@ -1,0 +1,117 @@
+# ==============================================================================
+# PRODUCTION DOCKER COMPOSE - Deploy from Docker Hub Images
+# ==============================================================================
+# This file pulls pre-built images from Docker Hub instead of building locally
+# Use this for deployment on WSL, production servers, or anywhere you want
+# to run the latest published images
+#
+# Usage:
+#   docker-compose -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # BACKEND SERVICE
+  # ============================================================================
+  backend:
+    # Pull the image from Docker Hub instead of building
+    image: azan840/my-backend:latest
+
+    container_name: my-backend-prod
+
+    # Port mapping: Host 5000 → Container 5000
+    ports:
+      - "5000:5000"
+
+    # Environment variables
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+
+    # Connect to network
+    networks:
+      - app-network
+
+    # Restart policy: always restart if container stops
+    restart: always
+
+    # Health check: Verify the backend is responding
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================================
+  # FRONTEND SERVICE
+  # ============================================================================
+  frontend:
+    # Pull the image from Docker Hub
+    image: azan840/my-frontend:latest
+
+    container_name: my-frontend-prod
+
+    # Port mapping: Host 3000 → Container 80 (nginx)
+    ports:
+      - "3000:80"
+
+    # Frontend depends on backend being available
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    # Connect to network
+    networks:
+      - app-network
+
+    # Restart policy
+    restart: always
+
+    # Health check for nginx
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+networks:
+  app-network:
+    driver: bridge
+
+# ==============================================================================
+# HOW TO USE
+# ==============================================================================
+# 1. Make sure Docker is running in WSL
+# 2. Pull latest images:
+#    docker-compose -f docker-compose.prod.yml pull
+#
+# 3. Start services:
+#    docker-compose -f docker-compose.prod.yml up -d
+#
+# 4. Check status:
+#    docker-compose -f docker-compose.prod.yml ps
+#
+# 5. View logs:
+#    docker-compose -f docker-compose.prod.yml logs -f
+#
+# 6. Stop services:
+#    docker-compose -f docker-compose.prod.yml down
+#
+# 7. Update to latest images:
+#    docker-compose -f docker-compose.prod.yml pull
+#    docker-compose -f docker-compose.prod.yml up -d
+
+# ==============================================================================
+# NOTES
+# ==============================================================================
+# - Images are pulled from Docker Hub (azan840/my-backend:latest)
+# - Health checks ensure backend is ready before frontend starts
+# - Services restart automatically if they crash
+# - Access backend: http://localhost:5000
+# - Access frontend: http://localhost:3000

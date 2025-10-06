@@ -7,7 +7,9 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+  // Use the same hostname as frontend, but port 5000 for backend
+  // This makes it work from any device (localhost, LAN IP, etc.)
+  const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000`
 
   const checkHealth = async () => {
     setLoading(true)
